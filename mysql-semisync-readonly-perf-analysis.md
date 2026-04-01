@@ -340,3 +340,174 @@ SET GLOBAL replication_sender_observe_commit_only = ON;
 | `sql/sql_plugin.cc:975` | `plugin_lock` → `LOCK_plugin` 互斥锁 |
 | `plugin/semisync/semisync_source_plugin.cc:124` | `repl_semi_report_begin` 空函数 |
 | `plugin/semisync/semisync_source_plugin.cc:403` | `Trans_observer` 注册表 |
+
+---
+
+## 十、补充：`Trans_observer` 详解
+
+### 10.1 本质：插件钩子函数表（Vtable）
+
+`Trans_observer` 是 MySQL 插件系统暴露给外部插件的**事务生命周期观察者接口**，本质上是一张**函数指针表**，定义在 `sql/replication.h`：
+
+```c
+typedef struct Trans_observer {
+  uint32 len;
+
+  before_dml_t    before_dml;       // DML 执行前校验
+  before_commit_t before_commit;    // binlog 写入前
+  before_rollback_t before_rollback;// 回滚前
+  after_commit_t  after_commit;     // 存储引擎提交后
+  after_rollback_t after_rollback;  // 存储引擎回滚后
+  begin_t         begin;            // SQL 开始执行前
+} Trans_observer;
+```
+
+插件初始化时填入自己的回调函数，注册到全局 `transaction_delegate`。此后 MySQL 在每个事务的关键生命周期节点，都会遍历所有已注册的 observer，依次调用对应的钩子。
+
+---
+
+### 10.2 六个钩子的触发时机与语义
+
+#### `begin` — 事务开始前
+
+**触发点**：每条 SQL 执行前，在 `launch_hook_trans_begin` 中调用。
+
+**语义**：SQL 命令即将开始执行，可在此处**拦截或延迟事务**。`out_val` 是输出参数，可向调用方传递错误码。
+
+**实际用途对比**：
+
+| 插件 | 实现 | 作用 |
+|------|------|------|
+| semisync_source | `return 0`（空函数） | 什么都不做，却引发全局锁争用（本文核心问题所在） |
+| Group Replication | `before_transaction_begin(...)` | 检查 `group_replication_consistency` 级别，若设置了 `BEFORE` 或 `BEFORE_AND_AFTER` 一致性，则**在此挂起等待**组内所有已提交事务都被 apply 完毕后才放行 |
+
+---
+
+#### `before_dml` — DML 执行前校验
+
+**触发点**：INSERT/UPDATE/DELETE 语句执行前，通过 `RUN_HOOK(transaction, before_dml, ...)` 调用。
+
+**语义**：在行数据实际修改之前，对本次 DML 涉及的**表结构进行合规性校验**。参数 `param->tables_info` 包含所有涉及表的元信息。
+
+**Group Replication 的实现**是最典型的用法，会逐项检查：
+- binlog 必须开启，且格式必须为 ROW
+- 必须开启 `transaction_write_set_extraction`
+- 所有涉及的表必须是 InnoDB 引擎
+- 所有涉及的表必须有主键
+- 不允许含 `ON DELETE/UPDATE CASCADE` 的外键
+
+任一检查失败则 `out++`，事务被中止。
+
+---
+
+#### `before_commit` — binlog 写入前
+
+**触发点**：事务 binlog 缓存即将落盘（写入 binary log 文件）之前。
+
+**这是整个 `Trans_observer` 体系中最重量级的钩子。**
+
+- **semisync_source**：此钩子为空函数（`return 0`），真正的等待在 `Binlog_storage_observer` 的 `after_flush` / `after_sync` 里
+- **Group Replication**：此处是 GR 的核心路径：
+  1. 将事务的 `write_set`（行哈希集合）+ binlog 缓存序列化成 `Transaction_message`
+  2. 通过 GCS（Paxos/Raft 层）**广播给所有组成员**
+  3. 调用 `transactions_latch->waitTicket()` **阻塞等待**认证结果（冲突检测通过才放行）
+  4. 认证失败则回滚整个事务
+
+---
+
+#### `before_rollback` — 回滚前
+
+**触发点**：事务向存储引擎发起 rollback 之前。
+
+当前 semisync 和 GR 均为空实现或只做简单清理。
+
+---
+
+#### `after_commit` — 存储引擎提交后
+
+**触发点**：事务提交到存储引擎（InnoDB redo 落盘）之后。此时 `param->log_file` 和 `param->log_pos` 已有效。
+
+**semisync 的关键用法**（`WAIT_AFTER_COMMIT` 模式）：
+
+```c
+static int repl_semi_report_commit(Trans_param *param) {
+  bool is_real_trans = param->flags & TRANS_IS_REAL_TRANS;
+  if (rpl_semi_sync_source_wait_point == WAIT_AFTER_COMMIT
+      && is_real_trans && param->log_pos) {
+    return repl_semisync->commitTrx(param->log_file, param->log_pos);
+    // ↑ 阻塞等待至少一个 replica 回复 ACK
+  }
+  return 0;
+}
+```
+
+**GR 的用法**：通知内部 `Group_transaction_listener` 更新 GTID 追踪、释放一致性等待。
+
+---
+
+#### `after_rollback` — 存储引擎回滚后
+
+**触发点**：事务在存储引擎中回滚完成之后。
+
+semisync 将此钩子复用 `repl_semi_report_commit` 的实现。原因：XA 事务等边界场景下，rollback 也可能已经写入了 binlog，需要触发 ACK 等待流程。
+
+---
+
+### 10.3 传递给钩子的数据：`Trans_param`
+
+所有钩子都接收同一个 `Trans_param` 结构体，各字段在不同钩子时机下有效性不同：
+
+| 字段 | 类型 | 有效时机 | 用途 |
+|------|------|---------|------|
+| `server_id` / `server_uuid` | 标识 | 全程 | 标识事务来源 |
+| `thread_id` | 标识 | 全程 | 关联会话 |
+| `flags` | 位标志 | 全程 | `TRANS_IS_REAL_TRANS` 等 |
+| `tables_info` / `number_of_tables` | 表元信息 | `before_dml` | 表名、引擎类型、主键数、是否有 CASCADE 外键 |
+| `trans_ctx_info` | 系统变量快照 | `before_dml` / `before_commit` | binlog_format、隔离级别、write_set 算法等 |
+| `trx_cache_log` / `stmt_cache_log` | binlog 缓存 | `before_commit` | GR 用于序列化广播消息 |
+| `log_file` / `log_pos` | binlog 坐标 | `after_commit` | semisync 用于等待 ACK |
+| `gtid_info` | GTID | `after_commit` | sidno + gno，GR 用于一致性追踪 |
+| `group_replication_consistency` | 枚举 | `begin` | GR 用于决定是否需要在 begin 处等待 |
+| `hold_timeout` | 超时 | `begin` | GR 事务最大等待时间 |
+
+---
+
+### 10.4 整体架构图
+
+```
+MySQL Server 事务生命周期
+       │
+       ├─ SQL 开始执行          → begin()
+       │    ↓                       semisync: 空函数（但触发 LOCK_plugin 竞争）
+       │                            GR: 检查一致性级别，可能挂起等待
+       ├─ DML 行操作前          → before_dml()
+       │    ↓                       semisync: 空函数
+       │                            GR: 校验表引擎/主键/外键合规性
+       │  [事务执行中 ...]
+       │    ↓
+       ├─ 写 binlog 缓存前      → before_commit()
+       │    ↓                       semisync: 空函数
+       │                            GR: 序列化广播 + 等待冲突检测认证
+       ├─ binlog fsync 后       → [Binlog_storage_observer::after_sync]
+       │    ↓                       semisync: WAIT_AFTER_SYNC 模式下等待 replica ACK
+       ├─ 存储引擎 commit 后    → after_commit()
+       │    ↓                       semisync: WAIT_AFTER_COMMIT 模式下等待 replica ACK
+       │                            GR: 释放一致性等待，更新 GTID 追踪
+       └─ 存储引擎 rollback 后  → after_rollback()
+                                    semisync: 同 after_commit 处理逻辑
+                                    GR: 通知内部观察者清理
+```
+
+---
+
+### 10.5 设计哲学：可插拔的事务扩展点
+
+`Trans_observer` 是 MySQL 为第三方插件开放的**事务扩展钩子**，将事务流程的每个关键节点暴露出来，允许插件在不修改 Server 核心代码的前提下：
+
+- **拦截**（`before_*`）：返回非 0 可中止事务
+- **扩展**（`after_*`）：通知外部系统（如等待 replica ACK）
+- **校验**（`before_dml`）：在数据变更前检查合规性
+
+正因为这套机制足够通用，semisync、Group Replication 以及任何第三方复制插件都可以复用同一套框架，Server 核心对具体实现一无所知。
+
+**本文性能问题的根源**正在于此：即使 semisync 的 `begin` 钩子是空函数，框架层仍须为每个注册的 observer 执行完整的 `plugin_lock` 流程。"空钩子不等于零开销"——插件注册的存在本身就是开销的来源。
