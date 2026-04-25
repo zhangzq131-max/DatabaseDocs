@@ -10,33 +10,33 @@
 
 1. [锁体系总览](#1-锁体系总览)
 2. [MDL 元数据锁（Metadata Locking）](#2-mdl-元数据锁)
-   - [2.1 核心文件](#21-核心文件)
-   - [2.2 MDL 命名空间（enum_mdl_namespace）](#22-mdl-命名空间)
-   - [2.3 MDL 锁类型（enum_mdl_type）](#23-mdl-锁类型)
-   - [2.4 MDL 锁持续时间（enum_mdl_duration）](#24-mdl-锁持续时间)
-   - [2.5 核心数据结构](#25-核心数据结构)
-   - [2.6 MDL_lock 内部结构](#26-mdl_lock-内部结构)
-   - [2.7 兼容性矩阵（Compatibility Matrix）](#27-兼容性矩阵)
-   - [2.8 快速路径与慢速路径（Fast/Slow Path）](#28-快速路径与慢速路径)
-   - [2.9 锁获取流程](#29-锁获取流程)
-   - [2.10 锁释放流程](#210-锁释放流程)
-   - [2.11 锁升级与降级](#211-锁升级与降级)
-   - [2.12 MDL 等待机制（MDL_wait）](#212-mdl-等待机制)
-   - [2.13 死锁检测](#213-死锁检测)
-   - [2.14 防饥饿机制（Piglet & Hog）](#214-防饥饿机制)
-   - [2.15 MDL 与事务集成](#215-mdl-与事务集成)
-   - [2.16 MDL 全局哈希表（MDL_map）](#216-mdl-全局哈希表)
+  - [2.1 核心文件](#21-核心文件)
+  - [2.2 MDL 命名空间（enum_mdl_namespace）](#22-mdl-命名空间)
+  - [2.3 MDL 锁类型（enum_mdl_type）](#23-mdl-锁类型)
+  - [2.4 MDL 锁持续时间（enum_mdl_duration）](#24-mdl-锁持续时间)
+  - [2.5 核心数据结构](#25-核心数据结构)
+  - [2.6 MDL_lock 内部结构](#26-mdl_lock-内部结构)
+  - [2.7 兼容性矩阵（Compatibility Matrix）](#27-兼容性矩阵)
+  - [2.8 快速路径与慢速路径（Fast/Slow Path）](#28-快速路径与慢速路径)
+  - [2.9 锁获取流程](#29-锁获取流程)
+  - [2.10 锁释放流程](#210-锁释放流程)
+  - [2.11 锁升级与降级](#211-锁升级与降级)
+  - [2.12 MDL 等待机制（MDL_wait）](#212-mdl-等待机制)
+  - [2.13 死锁检测](#213-死锁检测)
+  - [2.14 防饥饿机制（Piglet & Hog）](#214-防饥饿机制)
+  - [2.15 MDL 与事务集成](#215-mdl-与事务集成)
+  - [2.16 MDL 全局哈希表（MDL_map）](#216-mdl-全局哈希表)
 3. [THR_LOCK 表级锁](#3-thr_lock-表级锁)
-   - [3.1 核心文件](#31-核心文件)
-   - [3.2 锁类型枚举（thr_lock_type）](#32-锁类型枚举)
-   - [3.3 核心数据结构](#33-核心数据结构)
-   - [3.4 锁初始化](#34-锁初始化)
-   - [3.5 thr_lock() 加锁逻辑](#35-thr_lock-加锁逻辑)
-   - [3.6 wait_for_lock() 等待机制](#36-wait_for_lock-等待机制)
-   - [3.7 thr_unlock() 解锁流程](#37-thr_unlock-解锁流程)
-   - [3.8 wake_up_waiters() 唤醒机制](#38-wake_up_waiters-唤醒机制)
-   - [3.9 多表锁序（thr_multi_lock）](#39-多表锁序-thr_multi_lock)
-   - [3.10 优先级控制与防饥饿](#310-优先级控制与防饥饿)
+  - [3.1 核心文件](#31-核心文件)
+  - [3.2 锁类型枚举（thr_lock_type）](#32-锁类型枚举)
+  - [3.3 核心数据结构](#33-核心数据结构)
+  - [3.4 锁初始化](#34-锁初始化)
+  - [3.5 thr_lock() 加锁逻辑](#35-thr_lock-加锁逻辑)
+  - [3.6 wait_for_lock() 等待机制](#36-wait_for_lock-等待机制)
+  - [3.7 thr_unlock() 解锁流程](#37-thr_unlock-解锁流程)
+  - [3.8 wake_up_waiters() 唤醒机制](#38-wake_up_waiters-唤醒机制)
+  - [3.9 多表锁序（thr_multi_lock）](#39-多表锁序-thr_multi_lock)
+  - [3.10 优先级控制与防饥饿](#310-优先级控制与防饥饿)
 4. [MDL 与 THR_LOCK 的协作关系](#4-mdl-与-thr_lock-的协作关系)
 5. [开发新特性要点](#5-开发新特性要点)
 6. [关键代码行号索引](#6-关键代码行号索引)
@@ -64,6 +64,7 @@ MySQL 8.0 有多个层次的锁，最重要的两层是：
 ```
 
 **关键关系**：
+
 - 对非临时表，必须先通过 MDL 才能获取 THR_LOCK（见 `sql/lock.cc:199-203`）
 - MDL 在 `MDL_context`（每连接一个）中管理；THR_LOCK 在 `THR_LOCK`（每表一个）中管理
 - InnoDB 不使用 THR_LOCK，完全依赖 MDL + 自身行锁
@@ -74,12 +75,14 @@ MySQL 8.0 有多个层次的锁，最重要的两层是：
 
 ### 2.1 核心文件
 
-| 文件 | 路径 | 说明 |
-|------|------|------|
-| 头文件 | `sql/mdl.h` | 公开 API、数据结构定义 |
-| 实现文件 | `sql/mdl.cc` | 完整实现，含 MDL_lock 类定义 |
+
+| 文件      | 路径                | 说明                                     |
+| ------- | ----------------- | -------------------------------------- |
+| 头文件     | `sql/mdl.h`       | 公开 API、数据结构定义                          |
+| 实现文件    | `sql/mdl.cc`      | 完整实现，含 MDL_lock 类定义                    |
 | SQL 层调用 | `sql/sql_base.cc` | `open_table()`、`lock_tables()` 中调用 MDL |
-| 事务层调用 | `sql/sql_class.h` | `THD::mdl_context` 成员 |
+| 事务层调用   | `sql/sql_class.h` | `THD::mdl_context` 成员                  |
+
 
 ### 2.2 MDL 命名空间
 
@@ -112,29 +115,33 @@ enum enum_mdl_namespace {
 
 **策略分类**（`sql/mdl.cc:819-833`）：
 
-| 策略 | 命名空间 | 说明 |
-|------|---------|------|
+
+| 策略                       | 命名空间                                                                                            | 说明                  |
+| ------------------------ | ----------------------------------------------------------------------------------------------- | ------------------- |
 | `m_scoped_lock_strategy` | GLOBAL, TABLESPACE, SCHEMA, COMMIT, BACKUP_LOCK, RESOURCE_GROUPS, FOREIGN_KEY, CHECK_CONSTRAINT | 仅支持 IX / S / X 三种类型 |
-| `m_object_lock_strategy` | TABLE, FUNCTION, PROCEDURE, TRIGGER, EVENT, USER_LEVEL_LOCK 等 | 支持全部 10 种锁类型 |
+| `m_object_lock_strategy` | TABLE, FUNCTION, PROCEDURE, TRIGGER, EVENT, USER_LEVEL_LOCK 等                                   | 支持全部 10 种锁类型        |
+
 
 ### 2.3 MDL 锁类型
 
 定义在 `sql/mdl.h:196-329`：
 
-| 枚举值 | 简写 | 值 | 使用场景 |
-|--------|------|-----|---------|
-| `MDL_INTENTION_EXCLUSIVE` | IX | 0 | 仅用于 Scoped 锁；schema/global 下保护，查询 DD cache 时也使用 |
-| `MDL_SHARED` | S | 1 | 仅读元数据（存储过程、PREPARE 语句、HANDLER OPEN） |
-| `MDL_SHARED_HIGH_PRIO` | SH | 2 | 高优先级共享锁；INFORMATION_SCHEMA 查询；可忽略 pending X 锁 |
-| `MDL_SHARED_READ` | SR | 3 | SELECT / LOCK TABLE READ；有意图读数据 |
-| `MDL_SHARED_WRITE` | SW | 4 | INSERT / UPDATE / DELETE / SELECT FOR UPDATE |
-| `MDL_SHARED_WRITE_LOW_PRIO` | SWLP | 5 | LOW_PRIORITY DML |
-| `MDL_SHARED_UPGRADABLE` | SU | 6 | ALTER TABLE 第一阶段（可升级到 SNW/SNRW/X） |
-| `MDL_SHARED_READ_ONLY` | SRO | 7 | LOCK TABLE READ（阻塞所有修改） |
-| `MDL_SHARED_NO_WRITE` | SNW | 8 | ALTER TABLE 复制数据阶段（允许并发读） |
-| `MDL_SHARED_NO_READ_WRITE` | SNRW | 9 | LOCK TABLE WRITE（只允许 S 和 SH） |
-| `MDL_EXCLUSIVE` | X | 10 | CREATE/DROP/RENAME TABLE、DDL 执行阶段 |
-| `MDL_TYPE_END` | — | 11 | 哨兵 |
+
+| 枚举值                         | 简写   | 值   | 使用场景                                            |
+| --------------------------- | ---- | --- | ----------------------------------------------- |
+| `MDL_INTENTION_EXCLUSIVE`   | IX   | 0   | 仅用于 Scoped 锁；schema/global 下保护，查询 DD cache 时也使用 |
+| `MDL_SHARED`                | S    | 1   | 仅读元数据（存储过程、PREPARE 语句、HANDLER OPEN）             |
+| `MDL_SHARED_HIGH_PRIO`      | SH   | 2   | 高优先级共享锁；INFORMATION_SCHEMA 查询；可忽略 pending X 锁   |
+| `MDL_SHARED_READ`           | SR   | 3   | SELECT / LOCK TABLE READ；有意图读数据                 |
+| `MDL_SHARED_WRITE`          | SW   | 4   | INSERT / UPDATE / DELETE / SELECT FOR UPDATE    |
+| `MDL_SHARED_WRITE_LOW_PRIO` | SWLP | 5   | LOW_PRIORITY DML                                |
+| `MDL_SHARED_UPGRADABLE`     | SU   | 6   | ALTER TABLE 第一阶段（可升级到 SNW/SNRW/X）               |
+| `MDL_SHARED_READ_ONLY`      | SRO  | 7   | LOCK TABLE READ（阻塞所有修改）                         |
+| `MDL_SHARED_NO_WRITE`       | SNW  | 8   | ALTER TABLE 复制数据阶段（允许并发读）                       |
+| `MDL_SHARED_NO_READ_WRITE`  | SNRW | 9   | LOCK TABLE WRITE（只允许 S 和 SH）                    |
+| `MDL_EXCLUSIVE`             | X    | 10  | CREATE/DROP/RENAME TABLE、DDL 执行阶段               |
+| `MDL_TYPE_END`              | —    | 11  | 哨兵                                              |
+
 
 **锁强度排序**（强度递增）：IX < S ≈ SH < SR < SW ≈ SWLP < SU ≈ SRO < SNW < SNRW < X
 
@@ -142,11 +149,13 @@ enum enum_mdl_namespace {
 
 定义在 `sql/mdl.h:333-351`：
 
-| 枚举值 | 说明 | 释放时机 |
-|--------|------|---------|
-| `MDL_STATEMENT` | 语句级别 | 语句结束或事务结束时自动释放 |
-| `MDL_TRANSACTION` | 事务级别 | 事务结束时自动释放（Commit/Rollback） |
-| `MDL_EXPLICIT` | 显式级别 | 必须调用 `MDL_context::release_lock()` 手动释放 |
+
+| 枚举值               | 说明   | 释放时机                                    |
+| ----------------- | ---- | --------------------------------------- |
+| `MDL_STATEMENT`   | 语句级别 | 语句结束或事务结束时自动释放                          |
+| `MDL_TRANSACTION` | 事务级别 | 事务结束时自动释放（Commit/Rollback）              |
+| `MDL_EXPLICIT`    | 显式级别 | 必须调用 `MDL_context::release_lock()` 手动释放 |
+
 
 `MDL_ticket_store` 按三种 duration 分别维护链表（见 `sql/mdl.h:1115-1307`）。
 
@@ -165,6 +174,7 @@ enum enum_mdl_namespace {
 ```
 
 私有成员（`sql/mdl.h:783-788`）：
+
 ```cpp
 uint16 m_length{0};              // 总字节数
 uint16 m_db_name_length{0};      // db_name 字节数
@@ -209,6 +219,7 @@ PSI_metadata_lock *m_psi;       // 性能监控接口
 ```
 
 关键方法：
+
 - `is_upgradable_or_exclusive()` — 判断是否可升级/独占锁
 - `downgrade_lock(enum_mdl_type)` — 降级（如 X→SNW）
 - `get_deadlock_weight()` — 返回死锁检测权重（DML=25, DDL=100）
@@ -295,6 +306,7 @@ class MDL_lock {
 ```
 
 **静态策略实例**（`sql/mdl.cc`）：
+
 - `MDL_lock::m_scoped_lock_strategy`（2075 行）— 用于 GLOBAL/SCHEMA 等
 - `MDL_lock::m_object_lock_strategy`（2185 行）— 用于 TABLE 等
 
@@ -371,18 +383,23 @@ bool MDL_lock::can_grant_lock(enum_mdl_type type_arg,
 
 **对象锁（Object Namespace）**：
 
-| 类型 | 路径 | fast_path_state 编码 |
-|------|------|---------------------|
-| S, SH | fast path | bits 0–19（共用计数） |
-| SR | fast path | bits 20–39 |
-| SW, SWLP | fast path | bits 40–59（共用计数） |
-| SU, SRO, SNW, SNRW, X | slow path | — |
+
+| 类型                    | 路径        | fast_path_state 编码 |
+| --------------------- | --------- | ------------------ |
+| S, SH                 | fast path | bits 0–19（共用计数）    |
+| SR                    | fast path | bits 20–39         |
+| SW, SWLP              | fast path | bits 40–59（共用计数）   |
+| SU, SRO, SNW, SNRW, X | slow path | —                  |
+
 
 **Scoped 锁**：
-| 类型 | 路径 |
-|------|------|
-| IX | fast path（bits 0–59） |
-| S, X | slow path |
+
+
+| 类型   | 路径                   |
+| ---- | -------------------- |
+| IX   | fast path（bits 0–59） |
+| S, X | slow path            |
+
 
 #### Fast Path 加锁流程
 
@@ -444,6 +461,7 @@ MDL_context::release_lock(ticket)
 ```
 
 **批量释放**：
+
 - `release_statement_locks()`  — 释放 `MDL_STATEMENT` duration 的锁
 - `release_transactional_locks()` — 释放 `MDL_TRANSACTION` duration 的锁
 - `rollback_to_savepoint()` — 回滚到 savepoint，释放该 savepoint 之后的锁
@@ -565,6 +583,7 @@ class Deadlock_detection_visitor : public MDL_wait_for_graph_visitor {
 ```
 
 关键回调：
+
 - `enter_node(ctx)`: 若深度 ≥ 32，强制报告死锁（保守策略）
 - `inspect_edge(ctx)`: 若回到起点 `m_start_node`，发现环
 - `opt_change_victim_to(ctx)`: 按 `get_deadlock_weight()` 选择权重较小的 victim
@@ -572,6 +591,7 @@ class Deadlock_detection_visitor : public MDL_wait_for_graph_visitor {
 #### 等待图遍历（`sql/mdl.cc:3861-3991`）
 
 `MDL_lock::visit_subgraph(waiting_ticket, gvisitor)`：
+
 1. 读锁 `m_rwlock`
 2. 遍历 `m_granted` 中与 `waiting_ticket` 类型不兼容的 ticket
 3. 对每个这样的 ticket，调用其所属 `MDL_context` 的 `visit_subgraph()`
@@ -591,11 +611,13 @@ uint MDL_ticket::get_deadlock_weight() const {
 
 **常量**（`sql/mdl.h:955-957`）：
 
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| `DEADLOCK_WEIGHT_DML` | 25 | DML 事务权重（优先选为 victim） |
+
+| 常量                    | 值   | 说明                     |
+| --------------------- | --- | ---------------------- |
+| `DEADLOCK_WEIGHT_DML` | 25  | DML 事务权重（优先选为 victim）  |
 | `DEADLOCK_WEIGHT_DDL` | 100 | DDL 语句权重（尽量不选为 victim） |
-| `DEADLOCK_WEIGHT_ULL` | 50 | 用户级锁权重 |
+| `DEADLOCK_WEIGHT_ULL` | 50  | 用户级锁权重                 |
+
 
 **m_rwlock 读优先的必要性**（`sql/mdl.cc:536-567`）：
 
@@ -607,12 +629,14 @@ uint MDL_ticket::get_deadlock_weight() const {
 
 **四套优先级矩阵**（`MDL_lock_strategy::m_waiting_incompatible[0..3]`）：
 
-| 索引 | 触发条件 | 说明 |
-|------|---------|------|
-| 0 | 默认 | 标准优先级：Hog/Piglet 优先 |
-| 1 | `m_piglet_lock_count >= max_write_lock_count` | SW 优先级降低（SRO 优先于 SW） |
-| 2 | `m_hog_lock_count >= max_write_lock_count` | Hog 优先级降低（非 Hog 类型优先） |
-| 3 | 两者均超限 | SRO 优先于 SW/SWLP，非 Hog 优先于 Hog |
+
+| 索引  | 触发条件                                          | 说明                            |
+| --- | --------------------------------------------- | ----------------------------- |
+| 0   | 默认                                            | 标准优先级：Hog/Piglet 优先           |
+| 1   | `m_piglet_lock_count >= max_write_lock_count` | SW 优先级降低（SRO 优先于 SW）          |
+| 2   | `m_hog_lock_count >= max_write_lock_count`    | Hog 优先级降低（非 Hog 类型优先）         |
+| 3   | 两者均超限                                         | SRO 优先于 SW/SWLP，非 Hog 优先于 Hog |
+
 
 计数和切换逻辑（`sql/mdl.cc:672-687`）：
 
@@ -688,6 +712,7 @@ class MDL_map {
 ```
 
 关键方法：
+
 - `find(pins, key, pinned)` — 单例 namespace 直接返回预分配指针；否则 `lf_hash_search()`
 - `find_or_insert(pins, key, pinned)` — 查找或插入（`sql/mdl.cc:1250`）
 - `remove(pins, lock)` — 引用计数为零时删除
@@ -711,11 +736,13 @@ void MDL_map::init() {
 
 ### 3.1 核心文件
 
-| 文件 | 路径 | 说明 |
-|------|------|------|
-| 头文件 | `include/thr_lock.h` | 数据结构和 API 声明 |
-| 实现 | `mysys/thr_lock.cc` | 完整实现 |
-| SQL 层调用 | `sql/lock.cc` | `mysql_lock_tables()` → `thr_multi_lock()` |
+
+| 文件      | 路径                   | 说明                                         |
+| ------- | -------------------- | ------------------------------------------ |
+| 头文件     | `include/thr_lock.h` | 数据结构和 API 声明                               |
+| 实现      | `mysys/thr_lock.cc`  | 完整实现                                       |
+| SQL 层调用 | `sql/lock.cc`        | `mysql_lock_tables()` → `thr_multi_lock()` |
+
 
 **注意**：THR_LOCK 主要用于 MyISAM、MEMORY 等不支持行锁的存储引擎。InnoDB 不使用 THR_LOCK（但仍需先获取 MDL）。
 
@@ -745,6 +772,7 @@ enum thr_lock_type {
 **读/写分界**：`(int)lock_type <= (int)TL_READ_NO_INSERT` 为读锁请求。
 
 **兼容性大致规则**（枚举序数越小越弱）：
+
 - `TL_WRITE_ALLOW_WRITE` 允许多个并发写
 - `TL_WRITE_CONCURRENT_INSERT` 允许并发读（`TL_READ` 和 `TL_READ_HIGH_PRIORITY`）
 - `TL_WRITE` / `TL_WRITE_LOW_PRIORITY` 排他（阻塞所有读写）
@@ -791,7 +819,8 @@ struct THR_LOCK_DATA {
 };
 ```
 
-**`cond` 的生命周期**：
+`**cond` 的生命周期**：
+
 - 进入等待：`data->cond = owner->suspend`（`wait_for_lock()` 第 397 行）
 - 获得锁：`data->cond = nullptr`（`free_all_read_locks()` 第 723 行，或 `wake_up_waiters()` 中）
 - 超时/中止：也置 `nullptr`，加 `type = TL_UNLOCK`
@@ -1067,7 +1096,7 @@ if (lock->write_lock_count++ > max_write_lock_count) {
 - `max_write_lock_count`（默认 `~(ulong)0`，即几乎无限）控制连续写锁最大次数
 - 超限后重置计数并优先释放所有等待读请求
 
-**`TL_READ_HIGH_PRIORITY` 特殊处理**（`mysys/thr_lock.cc:553-557`）：
+`**TL_READ_HIGH_PRIORITY` 特殊处理**（`mysys/thr_lock.cc:553-557`）：
 
 ```cpp
 } else if (!lock->write_wait.data ||
@@ -1104,13 +1133,15 @@ mysql_lock_tables()                    [sql/lock.cc]
 
 `get_lock_data()` 调用各表的 `handler::store_lock()`，将 MDL 类型映射为 THR_LOCK 类型：
 
-| MDL 类型 | 对应 THR_LOCK 类型 |
-|---------|-------------------|
-| SR（SELECT） | TL_READ |
+
+| MDL 类型                   | 对应 THR_LOCK 类型                                                      |
+| ------------------------ | ------------------------------------------------------------------- |
+| SR（SELECT）               | TL_READ                                                             |
 | SW（INSERT/UPDATE/DELETE） | TL_WRITE_CONCURRENT_DEFAULT → TL_WRITE_CONCURRENT_INSERT 或 TL_WRITE |
-| SRO（LOCK TABLE READ） | TL_READ_NO_INSERT |
-| SNRW（LOCK TABLE WRITE） | TL_WRITE |
-| X（DDL） | TL_WRITE_ONLY（部分情况） |
+| SRO（LOCK TABLE READ）     | TL_READ_NO_INSERT                                                   |
+| SNRW（LOCK TABLE WRITE）   | TL_WRITE                                                            |
+| X（DDL）                   | TL_WRITE_ONLY（部分情况）                                                 |
+
 
 ---
 
@@ -1127,9 +1158,9 @@ mysql_lock_tables()                    [sql/lock.cc]
 
 1. 在 `sql/mdl.h:enum_mdl_type` 末尾（`MDL_TYPE_END` 之前）添加枚举值
 2. 更新 `sql/mdl.cc` 中 `m_object_lock_strategy`（或 `m_scoped_lock_strategy`）的：
-   - `m_granted_incompatible[]`：新类型与已有类型的兼容性
-   - `m_waiting_incompatible[4][]`：四套优先级矩阵
-   - `m_unobtrusive_lock_increment[]`：若为 unobtrusive 类型则设置 fast path 编码
+  - `m_granted_incompatible[]`：新类型与已有类型的兼容性
+  - `m_waiting_incompatible[4][]`：四套优先级矩阵
+  - `m_unobtrusive_lock_increment[]`：若为 unobtrusive 类型则设置 fast path 编码
 3. 若为 unobtrusive 类型，需确保 fast path 状态编码无重叠（bits 0-59 当前分配）
 4. 更新 `MDL_ticket::get_deadlock_weight()` 中的权重判断
 5. 若为 hog 类型（high priority exclusive），更新 `MDL_OBJECT_HOG_LOCK_TYPES` 宏
@@ -1144,18 +1175,20 @@ mysql_lock_tables()                    [sql/lock.cc]
 
 - MDL 调试：设置 `DBUG_TRACE` 和 MDL P_S 表（`performance_schema.metadata_locks`）
 - THR_LOCK 调试：启用 `EXTRA_DEBUG` 宏使能 `check_locks()` 一致性检查（`mysys/thr_lock.cc:256-302`）
-- 死锁检测：`DEADLOCK_WEIGHT_*` 常量和 `MAX_SEARCH_DEPTH` 可调整敏感度
+- 死锁检测：`DEADLOCK_WEIGHT`_* 常量和 `MAX_SEARCH_DEPTH` 可调整敏感度
 
 ### 线程安全注意事项
 
-| 操作 | 需要的锁 |
-|------|---------|
-| MDL fast path 获取/释放 | 无锁（原子 CAS） |
-| MDL slow path 获取/释放 | `MDL_lock::m_rwlock`（写锁） |
-| 死锁检测遍历 | `MDL_lock::m_rwlock`（读锁，优先于写等待） |
-| MDL_wait::set_status | `MDL_wait::m_LOCK_wait_status` |
-| THR_LOCK 所有操作 | `THR_LOCK::mutex` |
-| 全局锁列表 | `THR_LOCK_lock`（全局 mutex） |
+
+| 操作                   | 需要的锁                            |
+| -------------------- | ------------------------------- |
+| MDL fast path 获取/释放  | 无锁（原子 CAS）                      |
+| MDL slow path 获取/释放  | `MDL_lock::m_rwlock`（写锁）        |
+| 死锁检测遍历               | `MDL_lock::m_rwlock`（读锁，优先于写等待） |
+| MDL_wait::set_status | `MDL_wait::m_LOCK_wait_status`  |
+| THR_LOCK 所有操作        | `THR_LOCK::mutex`               |
+| 全局锁列表                | `THR_LOCK_lock`（全局 mutex）       |
+
 
 ---
 
@@ -1163,63 +1196,67 @@ mysql_lock_tables()                    [sql/lock.cc]
 
 ### MDL（`sql/mdl.h` 和 `sql/mdl.cc`）
 
-| 符号 | 文件 | 行号 |
-|------|------|------|
-| `enum_mdl_type` | mdl.h | 196–329 |
-| `enum_mdl_duration` | mdl.h | 333–351 |
-| `MDL_key::enum_mdl_namespace` | mdl.h | 400–421 |
-| `MDL_key`（私有成员） | mdl.h | 783–788 |
-| `MDL_request`（类定义） | mdl.h | 801–820 |
-| `MDL_wait`（类定义） | mdl.h | 1343–1370 |
-| `MDL_wait::timed_wait` | mdl.cc | 1807–1848 |
-| `MDL_context`（类定义） | mdl.h | 1411–1705 |
-| `MDL_lock`（类定义） | mdl.cc | 427–1051 |
-| `MDL_lock::MDL_lock_strategy`（结构体） | mdl.cc | 466–531 |
-| `MDL_lock::m_scoped_lock_strategy` | mdl.cc | 2075–2178 |
-| `MDL_lock::m_object_lock_strategy` | mdl.cc | 2185–2378 |
-| `MDL_lock::get_strategy()` | mdl.cc | 819–833 |
-| `MDL_lock::can_grant_lock()` | mdl.cc | 2396–2411 |
-| `MDL_lock::count_piglets_and_hogs()` | mdl.cc | 672–687 |
-| `MDL_lock::visit_subgraph()` | mdl.cc | 3861–3991 |
-| `MDL_context::try_acquire_lock` | mdl.cc | 2685–2808 |
-| `MDL_context::acquire_lock` | mdl.cc | 3359–3591 |
-| `MDL_context::acquire_locks` | mdl.cc | 3638–3689 |
-| `MDL_context::upgrade_shared_lock` | mdl.cc | 3745–3849 |
-| `MDL_ticket::downgrade_lock` | mdl.cc | ~4296 |
-| `MDL_context::release_lock` | mdl.cc | 4095–4204 |
-| `MDL_context::find_deadlock` | mdl.cc | 4044–4084 |
-| `MDL_ticket::get_deadlock_weight` | mdl.cc | 1698–1741 |
-| `Deadlock_detection_visitor` | mdl.cc | 291–406 |
-| `MDL_map`（类定义） | mdl.cc | 158–272 |
-| `MDL_map::init` | mdl.cc | 1134–1149 |
-| `MDL_map::find_or_insert` | mdl.cc | ~1250 |
-| `MDL_BIT` 宏 | mdl.cc | 414 |
+
+| 符号                                   | 文件     | 行号        |
+| ------------------------------------ | ------ | --------- |
+| `enum_mdl_type`                      | mdl.h  | 196–329   |
+| `enum_mdl_duration`                  | mdl.h  | 333–351   |
+| `MDL_key::enum_mdl_namespace`        | mdl.h  | 400–421   |
+| `MDL_key`（私有成员）                      | mdl.h  | 783–788   |
+| `MDL_request`（类定义）                   | mdl.h  | 801–820   |
+| `MDL_wait`（类定义）                      | mdl.h  | 1343–1370 |
+| `MDL_wait::timed_wait`               | mdl.cc | 1807–1848 |
+| `MDL_context`（类定义）                   | mdl.h  | 1411–1705 |
+| `MDL_lock`（类定义）                      | mdl.cc | 427–1051  |
+| `MDL_lock::MDL_lock_strategy`（结构体）   | mdl.cc | 466–531   |
+| `MDL_lock::m_scoped_lock_strategy`   | mdl.cc | 2075–2178 |
+| `MDL_lock::m_object_lock_strategy`   | mdl.cc | 2185–2378 |
+| `MDL_lock::get_strategy()`           | mdl.cc | 819–833   |
+| `MDL_lock::can_grant_lock()`         | mdl.cc | 2396–2411 |
+| `MDL_lock::count_piglets_and_hogs()` | mdl.cc | 672–687   |
+| `MDL_lock::visit_subgraph()`         | mdl.cc | 3861–3991 |
+| `MDL_context::try_acquire_lock`      | mdl.cc | 2685–2808 |
+| `MDL_context::acquire_lock`          | mdl.cc | 3359–3591 |
+| `MDL_context::acquire_locks`         | mdl.cc | 3638–3689 |
+| `MDL_context::upgrade_shared_lock`   | mdl.cc | 3745–3849 |
+| `MDL_ticket::downgrade_lock`         | mdl.cc | ~4296     |
+| `MDL_context::release_lock`          | mdl.cc | 4095–4204 |
+| `MDL_context::find_deadlock`         | mdl.cc | 4044–4084 |
+| `MDL_ticket::get_deadlock_weight`    | mdl.cc | 1698–1741 |
+| `Deadlock_detection_visitor`         | mdl.cc | 291–406   |
+| `MDL_map`（类定义）                       | mdl.cc | 158–272   |
+| `MDL_map::init`                      | mdl.cc | 1134–1149 |
+| `MDL_map::find_or_insert`            | mdl.cc | ~1250     |
+| `MDL_BIT` 宏                          | mdl.cc | 414       |
+
 
 ### THR_LOCK（`include/thr_lock.h` 和 `mysys/thr_lock.cc`）
 
-| 符号 | 文件 | 行号 |
-|------|------|------|
-| `thr_lock_type`（枚举） | thr_lock.h | 51–95 |
-| `enum_thr_lock_result` | thr_lock.h | 104–109 |
-| `THR_LOCK_INFO`（结构体） | thr_lock.h | 119–122 |
-| `THR_LOCK_DATA`（结构体） | thr_lock.h | 124–133 |
-| `st_lock_list`（结构体） | thr_lock.h | 135–137 |
-| `THR_LOCK`（结构体） | thr_lock.h | 139–154 |
-| `max_write_lock_count` | thr_lock.cc | 123 |
-| `thr_lock_init` | thr_lock.cc | 306–320 |
-| `thr_lock_data_init` | thr_lock.cc | 338–344 |
-| `thr_lock_info_init` | thr_lock.cc | 330–334 |
-| `wait_for_lock` | thr_lock.cc | 356–474 |
-| `thr_lock`（主函数） | thr_lock.cc | 476–684 |
-| `free_all_read_locks` | thr_lock.cc | 686–729 |
-| `thr_unlock` | thr_lock.cc | 733–759 |
-| `wake_up_waiters` | thr_lock.cc | 769–868 |
-| `LOCK_CMP` 宏 | thr_lock.cc | 876–878 |
-| `sort_locks` | thr_lock.cc | 880–895 |
-| `thr_multi_lock` | thr_lock.cc | 897–921 |
-| `thr_multi_unlock` | thr_lock.cc | 923（起始） |
-| `thr_lock_merge_status` | thr_lock.cc | 949（起始） |
+
+| 符号                           | 文件          | 行号        |
+| ---------------------------- | ----------- | --------- |
+| `thr_lock_type`（枚举）          | thr_lock.h  | 51–95     |
+| `enum_thr_lock_result`       | thr_lock.h  | 104–109   |
+| `THR_LOCK_INFO`（结构体）         | thr_lock.h  | 119–122   |
+| `THR_LOCK_DATA`（结构体）         | thr_lock.h  | 124–133   |
+| `st_lock_list`（结构体）          | thr_lock.h  | 135–137   |
+| `THR_LOCK`（结构体）              | thr_lock.h  | 139–154   |
+| `max_write_lock_count`       | thr_lock.cc | 123       |
+| `thr_lock_init`              | thr_lock.cc | 306–320   |
+| `thr_lock_data_init`         | thr_lock.cc | 338–344   |
+| `thr_lock_info_init`         | thr_lock.cc | 330–334   |
+| `wait_for_lock`              | thr_lock.cc | 356–474   |
+| `thr_lock`（主函数）              | thr_lock.cc | 476–684   |
+| `free_all_read_locks`        | thr_lock.cc | 686–729   |
+| `thr_unlock`                 | thr_lock.cc | 733–759   |
+| `wake_up_waiters`            | thr_lock.cc | 769–868   |
+| `LOCK_CMP` 宏                 | thr_lock.cc | 876–878   |
+| `sort_locks`                 | thr_lock.cc | 880–895   |
+| `thr_multi_lock`             | thr_lock.cc | 897–921   |
+| `thr_multi_unlock`           | thr_lock.cc | 923（起始）   |
+| `thr_lock_merge_status`      | thr_lock.cc | 949（起始）   |
 | `thr_abort_locks_for_thread` | thr_lock.cc | 1016–1051 |
+
 
 ---
 
