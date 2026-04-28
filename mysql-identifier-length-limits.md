@@ -70,22 +70,24 @@ static constexpr int HOSTNAME_LENGTH = 255;  // 主机名字节上限
 
 ### 2.1 标识符限制表
 
-| 名称类型 | 字符数上限 | 字节数上限 | 源码定义位置 | 检查函数 |
-|---------|-----------|-----------|-------------|---------|
-| **库名 (Database)** | 64 | 192 | `NAME_CHAR_LEN` | `sql/table.cc:3585` `check_db_name()` |
-| **表名 (Table)** | 64 | 192 | `NAME_CHAR_LEN` | `sql/table.cc:3660` `check_table_name()` |
-| **字段名 (Column)** | 64 | 192 | `NAME_CHAR_LEN` | `sql/table.cc:3687` `check_column_name()` |
-| **索引名 (Index)** | 64 | 192 | `NAME_CHAR_LEN` | `sql/sql_table.cc:7019` |
-| **外键名 (FK)** | 64 | 192 | `NAME_CHAR_LEN` | `sql/sql_table.cc:6449` |
-| **视图名 (View)** | 64 | 192 | `NAME_CHAR_LEN` | 同表名检查 |
-| **存储过程名** | 64 | 192 | `NAME_CHAR_LEN` | `sql/sp.cc:2383` |
-| **存储函数名** | 64 | 192 | `NAME_CHAR_LEN` | `sql/sp.cc:2383` |
-| **触发器名** | 64 | 192 | `NAME_CHAR_LEN` | `sql/parse_tree_partitions.cc:75` |
-| **事件名** | 64 | 192 | `NAME_CHAR_LEN` | `sql/sp.cc:2383` |
-| **分区名** | 64 | 192 | `NAME_CHAR_LEN` | `sql/parse_tree_partitions.cc:75` |
-| **检查约束名** | 64 | 192 | `NAME_CHAR_LEN` | `sql/sql_check_constraint.cc:49` |
-| **用户名** | 32 | 96 | `USERNAME_CHAR_LENGTH` | `sql/sql_udf.cc:619` |
-| **主机名** | 255 | 765* | `HOSTNAME_LENGTH` | — |
+
+| 名称类型              | 字符数上限 | 字节数上限 | 源码定义位置                 | 检查函数                                      |
+| ----------------- | ----- | ----- | ---------------------- | ----------------------------------------- |
+| **库名 (Database)** | 64    | 192   | `NAME_CHAR_LEN`        | `sql/table.cc:3585` `check_db_name()`     |
+| **表名 (Table)**    | 64    | 192   | `NAME_CHAR_LEN`        | `sql/table.cc:3660` `check_table_name()`  |
+| **字段名 (Column)**  | 64    | 192   | `NAME_CHAR_LEN`        | `sql/table.cc:3687` `check_column_name()` |
+| **索引名 (Index)**   | 64    | 192   | `NAME_CHAR_LEN`        | `sql/sql_table.cc:7019`                   |
+| **外键名 (FK)**      | 64    | 192   | `NAME_CHAR_LEN`        | `sql/sql_table.cc:6449`                   |
+| **视图名 (View)**    | 64    | 192   | `NAME_CHAR_LEN`        | 同表名检查                                     |
+| **存储过程名**         | 64    | 192   | `NAME_CHAR_LEN`        | `sql/sp.cc:2383`                          |
+| **存储函数名**         | 64    | 192   | `NAME_CHAR_LEN`        | `sql/sp.cc:2383`                          |
+| **触发器名**          | 64    | 192   | `NAME_CHAR_LEN`        | `sql/parse_tree_partitions.cc:75`         |
+| **事件名**           | 64    | 192   | `NAME_CHAR_LEN`        | `sql/sp.cc:2383`                          |
+| **分区名**           | 64    | 192   | `NAME_CHAR_LEN`        | `sql/parse_tree_partitions.cc:75`         |
+| **检查约束名**         | 64    | 192   | `NAME_CHAR_LEN`        | `sql/sql_check_constraint.cc:49`          |
+| **用户名**           | 32    | 96    | `USERNAME_CHAR_LENGTH` | `sql/sql_udf.cc:619`                      |
+| **主机名**           | 255   | 765*  | `HOSTNAME_LENGTH`      | —                                         |
+
 
 *注：主机名字节上限取决于编码，UTF8MB4 下为 255 × 4 = 1020 字节，但实际使用 `HOSTNAME_LENGTH = 255` 作为字节上限。
 
@@ -202,22 +204,27 @@ if (check_string_char_length(key->name, "", NAME_CHAR_LEN,
 
 MySQL 对标识符施加**双重限制**：
 
-| 检查层 | 条件 | 常量 |
-|-------|------|------|
-| **字节长度** | `length <= NAME_LEN` | `NAME_LEN = 192` |
-| **字符数** | `name_length <= NAME_CHAR_LEN` | `NAME_CHAR_LEN = 64` |
+
+| 检查层      | 条件                             | 常量                   |
+| -------- | ------------------------------ | -------------------- |
+| **字节长度** | `length <= NAME_LEN`           | `NAME_LEN = 192`     |
+| **字符数**  | `name_length <= NAME_CHAR_LEN` | `NAME_CHAR_LEN = 64` |
+
 
 ### 4.2 UTF8MB4 编码下的实际限制
 
 UTF8MB4 编码中，不同字符占用不同字节数：
 
-| 字符类型 | 字节/字符 | 最大字符数（字节限制下） | 字节数上限（64字符） |
-|---------|----------|------------------------|-------------------|
-| ASCII/latin1 | 1 | 64 | 64 |
-| 中文字符（BMP内） | 3 | 64 | 192 |
-| Emoji/补充字符 | 4 | **48** | 256 |
+
+| 字符类型         | 字节/字符 | 最大字符数（字节限制下） | 字节数上限（64字符） |
+| ------------ | ----- | ------------ | ----------- |
+| ASCII/latin1 | 1     | 64           | 64          |
+| 中文字符（BMP内）   | 3     | 64           | 192         |
+| Emoji/补充字符   | 4     | **48**       | 256         |
+
 
 **关键结论**：在 UTF8MB4 编码下，如果标识符包含大量 emoji 或补充字符（4字节/字符），则：
+
 - 字节限制（192）会先触发
 - 实际最大字符数降至 **48 个**
 
@@ -257,11 +264,13 @@ static_assert(MAX_MDLKEY_LENGTH == 387, "UTF8MB3");
 
 ### 5.2 时间线
 
-| 时间 | 事件 |
-|-----|------|
-| MySQL 5.5.3 之前 | `utf8` 字符集仅支持 BMP 字符（最多 3 字节），即现在的 `utf8mb3` |
-| MySQL 5.5.3 | 引入 `utf8mb4`，支持完整 Unicode（最多 4 字节） |
-| MySQL 8.0 | `utf8mb4` 成为默认字符集，但 `SYSTEM_CHARSET_MBMAXLEN` 保持为 3 |
+
+| 时间             | 事件                                                  |
+| -------------- | --------------------------------------------------- |
+| MySQL 5.5.3 之前 | `utf8` 字符集仅支持 BMP 字符（最多 3 字节），即现在的 `utf8mb3`        |
+| MySQL 5.5.3    | 引入 `utf8mb4`，支持完整 Unicode（最多 4 字节）                  |
+| MySQL 8.0      | `utf8mb4` 成为默认字符集，但 `SYSTEM_CHARSET_MBMAXLEN` 保持为 3 |
+
 
 ### 5.3 设计决策分析
 
@@ -306,21 +315,25 @@ CREATE TABLE `中中中...（64个中字）` (id INT);
 
 ### 6.2 最佳实践建议
 
-| 场景 | 建议 |
-|-----|------|
-| 纯 ASCII 环境 | 可使用完整 64 字符 |
-| 国际化应用（中文等） | 建议控制在 60 字符以内，留安全余量 |
-| 包含 Emoji 的标识符 | 严格控制在 **48 字符以内** |
-| 索引名 | 同上限制，注意与列名区分 |
+
+| 场景            | 建议                  |
+| ------------- | ------------------- |
+| 纯 ASCII 环境    | 可使用完整 64 字符         |
+| 国际化应用（中文等）    | 建议控制在 60 字符以内，留安全余量 |
+| 包含 Emoji 的标识符 | 严格控制在 **48 字符以内**   |
+| 索引名           | 同上限制，注意与列名区分        |
+
 
 ### 6.3 错误代码
 
-| 错误码 | 错误名 | 含义 |
-|-------|--------|------|
-| `ER_TOO_LONG_IDENT` (1470) | Identifier name is too long | 超过 64 字符或 192 字节 |
-| `ER_WRONG_COLUMN_NAME` (1166) | Wrong column name | 字段名格式错误（含非法字符等） |
-| `ER_WRONG_TABLE_NAME` (1103) | Wrong table name | 表名格式错误 |
-| `ER_WRONG_DB_NAME` (1102) | Wrong database name | 库名格式错误 |
+
+| 错误码                           | 错误名                         | 含义               |
+| ----------------------------- | --------------------------- | ---------------- |
+| `ER_TOO_LONG_IDENT` (1470)    | Identifier name is too long | 超过 64 字符或 192 字节 |
+| `ER_WRONG_COLUMN_NAME` (1166) | Wrong column name           | 字段名格式错误（含非法字符等）  |
+| `ER_WRONG_TABLE_NAME` (1103)  | Wrong table name            | 表名格式错误           |
+| `ER_WRONG_DB_NAME` (1102)     | Wrong database name         | 库名格式错误           |
+
 
 ### 6.4 源码修改指南
 
@@ -335,20 +348,22 @@ CREATE TABLE `中中中...（64个中字）` (id INT);
 
 ## 附录：关键代码行号索引
 
-| 符号 | 文件 | 行号 |
-|------|------|------|
-| `SYSTEM_CHARSET_MBMAXLEN` | mysql_com.h | 57 |
-| `NAME_CHAR_LEN` | mysql_com.h | 59 |
-| `NAME_LEN` | mysql_com.h | 66 |
-| `USERNAME_CHAR_LENGTH` | mysql_com.h | 63 |
-| `HOSTNAME_LENGTH` | my_hostname.h | 42 |
-| `MAX_MDLKEY_LENGTH` | mdl.h | 339 |
-| `MAX_KEY_LENGTH` | sql_const.h | 53 |
-| `check_table_name()` | table.cc | 3660-3685 |
-| `check_column_name()` | table.cc | 3687-3709 |
-| `check_db_name()` | table.cc | 3585-3599 |
-| `utf8mb4 mbmaxlen=4` | ctype-utf8.cc | 7821 |
-| `static_assert UTF8MB3` | mdl.h | 575 |
+
+| 符号                        | 文件            | 行号        |
+| ------------------------- | ------------- | --------- |
+| `SYSTEM_CHARSET_MBMAXLEN` | mysql_com.h   | 57        |
+| `NAME_CHAR_LEN`           | mysql_com.h   | 59        |
+| `NAME_LEN`                | mysql_com.h   | 66        |
+| `USERNAME_CHAR_LENGTH`    | mysql_com.h   | 63        |
+| `HOSTNAME_LENGTH`         | my_hostname.h | 42        |
+| `MAX_MDLKEY_LENGTH`       | mdl.h         | 339       |
+| `MAX_KEY_LENGTH`          | sql_const.h   | 53        |
+| `check_table_name()`      | table.cc      | 3660-3685 |
+| `check_column_name()`     | table.cc      | 3687-3709 |
+| `check_db_name()`         | table.cc      | 3585-3599 |
+| `utf8mb4 mbmaxlen=4`      | ctype-utf8.cc | 7821      |
+| `static_assert UTF8MB3`   | mdl.h         | 575       |
+
 
 ---
 
